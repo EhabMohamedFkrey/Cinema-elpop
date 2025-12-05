@@ -6,79 +6,21 @@
     <title>سينما البوب | Cinema Elpop</title>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
-        body {
-            background-color: #121212;
-            color: #fff;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            text-align: center;
-            padding: 20px;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: #1e1e1e;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.6);
-        }
-        h1 { color: #e50914; margin-bottom: 10px; }
-        input {
-            width: 80%;
-            padding: 12px;
-            margin: 10px 0;
-            background: #333;
-            border: 1px solid #555;
-            color: white;
-            border-radius: 6px;
-            font-size: 16px;
-        }
-        button {
-            padding: 12px 25px;
-            background: #e50914;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: bold;
-        }
-        button:hover { background: #b20710; }
-        
+        body { background-color: #121212; color: #fff; font-family: sans-serif; text-align: center; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 12px; }
+        input { width: 80%; padding: 12px; margin: 10px 0; background: #333; color: white; border: 1px solid #555; }
+        button { padding: 12px 25px; background: #e50914; color: white; border: none; cursor: pointer; font-weight: bold; }
         #videoArea { display: none; margin-top: 20px; }
-        video {
-            width: 100%;
-            border-radius: 8px;
-            background: #000;
-            max-height: 500px;
-        }
-        
-        /* زر التحميل الجديد */
-        .download-btn {
-            display: inline-block;
-            margin-top: 15px;
-            padding: 10px 20px;
-            background: #28a745;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .download-btn:hover { background: #218838; }
-
-        .loading { display: none; color: #aaa; margin-top: 10px; }
+        video { width: 100%; border-radius: 8px; background: #000; }
+        .download-btn { display: inline-block; margin-top: 15px; padding: 10px 20px; background: #28a745; color: white; text-decoration: none; border-radius: 5px; }
     </style>
 </head>
 <body>
-
     <div class="container">
         <h1>🎬 سينما البوب</h1>
-        <p>ضع رابط صفحة المشاهدة (Watch) هنا:</p>
-        
-        <input type="text" id="urlInput" placeholder="https://a.asd.homes/.../watch/">
-        <button onclick="fetchVideo()">شاهد وحمل 🚀</button>
-        
-        <p class="loading" id="loading">جاري البحث عن الفيديو.. (قد يستغرق 30 ثانية)</p>
+        <input type="text" id="urlInput" placeholder="رابط صفحة المشاهدة (Watch)...">
+        <button onclick="fetchVideo()">شاهد الآن 🚀</button>
+        <p id="loading" style="display:none; color:#aaa;">جاري جلب الفيديو... (اصبر شوية)</p>
 
         <div id="videoArea">
             <video id="videoPlayer" controls playsinline></video>
@@ -95,40 +37,45 @@
             const video = document.getElementById('videoPlayer');
             const downloadBtn = document.getElementById('downloadLink');
 
-            if (!url) return alert("حط الرابط الأول!");
-
+            if (!url) return alert("حط الرابط!");
+            
             loading.style.display = 'block';
             videoArea.style.display = 'none';
 
             try {
+                // 1. نجيب الرابط الأصلي
                 const res = await fetch(`/get-video?url=${encodeURIComponent(url)}`);
                 const data = await res.json();
-
                 loading.style.display = 'none';
 
                 if (data.success && data.stream_url) {
                     videoArea.style.display = 'block';
-                    const streamUrl = data.stream_url;
+                    
+                    // 2. نحوله لرابط "كوبري" عشان يشتغل
+                    // لو الرابط m3u8 (بث مباشر/جودات) بنشغله علطول
+                    // لو mp4 (ملف) بنعديه من الكوبري
+                    let finalUrl = data.stream_url;
+                    
+                    if (finalUrl.includes('.mp4')) {
+                        finalUrl = `/proxy-video?url=${encodeURIComponent(finalUrl)}`;
+                    }
 
-                    // إعداد زر التحميل
-                    downloadBtn.href = streamUrl;
+                    downloadBtn.href = finalUrl; // زر التحميل هياخد الرابط الشغال
 
-                    // تشغيل الفيديو باستخدام HLS لو الصيغة m3u8 (عشان الجودات)
-                    if (Hls.isSupported() && streamUrl.includes('.m3u8')) {
+                    if (Hls.isSupported() && data.stream_url.includes('.m3u8')) {
                         const hls = new Hls();
-                        hls.loadSource(streamUrl);
+                        hls.loadSource(data.stream_url); // m3u8 عادة مش بيحتاج كوبري
                         hls.attachMedia(video);
                     } else {
-                        // تشغيل عادي لو mp4
-                        video.src = streamUrl;
+                        video.src = finalUrl;
                     }
                     video.play();
                 } else {
-                    alert("للأسف: " + (data.message || "لم يتم العثور على فيديو"));
+                    alert("مش لاقي فيديو: " + data.message);
                 }
             } catch (err) {
                 loading.style.display = 'none';
-                alert("خطأ في الاتصال بالسيرفر");
+                alert("خطأ في السيرفر");
             }
         }
     </script>
