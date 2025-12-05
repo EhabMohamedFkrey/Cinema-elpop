@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سينما البوب | Cinema Elpop</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 { color: #e50914; margin-bottom: 20px; }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        input {
+            width: 95%;
+            padding: 12px;
+            margin-bottom: 15px;
+            background: #333;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #e50914;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { background: #b20710; }
+        #videoContainer {
+            margin-top: 20px;
+            display: none;
+            width: 100%;
+        }
+        video {
+            width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
+        }
+        .loading { display: none; margin-top: 10px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <h1>🎬 سينما البوب</h1>
+    
+    <div class="container">
+        <p>حط رابط صفحة الفيلم هنا واستمتع:</p>
+        <input type="text" id="movieUrl" placeholder="مثال: https://a.asd.homes/...">
+        <button onclick="getMovie()">شاهد الآن 🍿</button>
+        <p class="loading" id="loadingText">جاري البحث عن الفيديو... اصبر ثواني ⏳</p>
+    </div>
+
+    <div id="videoContainer">
+        <video id="player" controls playsinline>
+            <source src="" type="video/mp4">
+            المتصفح بتاعك مش بيدعم الفيديو ده.
+        </video>
+    </div>
+
+    <script>
+        async function getMovie() {
+            const urlInput = document.getElementById('movieUrl').value;
+            const loading = document.getElementById('loadingText');
+            const container = document.getElementById('videoContainer');
+            const player = document.getElementById('player');
+
+            if (!urlInput) return alert("يا ريس نسيت تحط الرابط!");
+
+            loading.style.display = 'block';
+            container.style.display = 'none';
+
+            try {
+                // نكلم السيرفر بتاعنا
+                const response = await fetch(`/get-video?url=${encodeURIComponent(urlInput)}`);
+                const data = await response.json();
+
+                loading.style.display = 'none';
+
+                if (data.success && data.stream_url) {
+                    player.src = data.stream_url;
+                    container.style.display = 'block';
+                    player.play();
+                } else {
+                    alert("مش قادر أجيب الفيديو: " + (data.message || "سبب غير معروف"));
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                alert("حصل خطأ في الاتصال بالسيرفر!");
+            }
+        }
+    </script>
+</body>
+</html>
