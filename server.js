@@ -1,53 +1,85 @@
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer-extra'); // النسخة الذكية
+const StealthPlugin = require('puppeteer-extra-plugin-stealth'); // التخفي من الحماية
 const cors = require('cors');
-const path = require('path'); // مكتبة عشان مسارات الملفات
+const path = require('path');
+
+// تفعيل وضع التخفي عشان الموقع ميعرفش إننا روبوت
+puppeteer.use(StealthPlugin());
 
 const app = express();
 app.use(cors());
 
-// إعدادات التخفي
-const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Referer': 'https://a.asd.homes/'
-};
-
-// هنا التغيير: لما حد يفتح الموقع الرئيسي، ابعتله ملف الواجهة
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ده API القناص زي ما هو
 app.get('/get-video', async (req, res) => {
-    const movieUrl = req.query.url; 
-    if (!movieUrl) return res.status(400).json({ error: 'Missing URL' });
+    const movieUrl = req.query.url;
+    if (!movieUrl) return res.status(400).json({ error: 'فين الرابط؟' });
 
+    let browser = null;
     try {
-        console.log(`Checking: ${movieUrl}`);
-        const { data: pageHtml } = await axios.get(movieUrl, { headers });
-        const $ = cheerio.load(pageHtml);
+        console.log(`🚀 جاري فتح المتصفح للرابط: ${movieUrl}`);
 
-        let foundLink = null;
-        $('iframe').each((i, el) => {
-            const src = $(el).attr('src');
-            if (src && (src.includes('mp4') || src.includes('embed') || src.includes('watch'))) foundLink = src;
+        // تشغيل المتصفح بإعدادات خاصة لسيرفر Render
+        browser = await puppeteer.launch({
+            headless: 'new', // تشغيل في الخلفية
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', // توفير الذاكرة
+                '--single-process' 
+            ]
         });
 
-        if (!foundLink) {
-            const mp4Match = pageHtml.match(/https?:\/\/[^"']+\.mp4/);
-            if (mp4Match) foundLink = mp4Match[0];
+        const page = await browser.newPage();
+
+        // تسريع التحميل عن طريق منع الصور والخطوط
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+                req.abort();
+            } else {
+                req.continue();
+            }
+        });
+
+        // الذهاب للموقع وانتظار التحميل
+        // timeout 60 ثانية عشان لو الموقع بطيء
+        await page.goto(movieUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+
+        // البحث الذكي عن الفيديو داخل الصفحة
+        const videoData = await page.evaluate(() => {
+            // 1. تدوير على أي iframe فيه كلمة video أو embed
+            const iframes = Array.from(document.querySelectorAll('iframe'));
+            for (let iframe of iframes) {
+                if (iframe.src && (iframe.src.includes('embed') || iframe.src.includes('watch') || iframe.src.includes('mp4'))) {
+                    return iframe.src;
+                }
+            }
+            
+            // 2. تدوير على عنصر video مباشر
+            const video = document.querySelector('video');
+            if (video && video.src) return video.src;
+
+            return null; 
+        });
+
+        if (videoData) {
+            console.log('✅ تم العثور على الفيديو:', videoData);
+            res.json({ success: true, stream_url: videoData });
+        } else {
+            console.log('❌ لم يتم العثور على فيديو مباشر.');
+            res.json({ success: false, message: "الموقع فتح بس مش لاقيين الفيديو، جرب رابط المشاهدة المباشر (watch) مش صفحة الفيلم." });
         }
 
-        if (foundLink) {
-            if (foundLink.startsWith('//')) foundLink = 'https:' + foundLink;
-            res.json({ success: true, stream_url: foundLink });
-        } else {
-            res.json({ success: false, message: "No video found" });
-        }
     } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+        console.error('Error:', error.message);
+        res.status(500).json({ success: false, error: "حدث خطأ أثناء التصفح: " + error.message });
+    } finally {
+        if (browser) await browser.close(); // قفل المتصفح ضروري عشان الرامات
     }
 });
 
-app.listen(3000, () => console.log('Cinema Elpop Ready! 🍿'));
+app.listen(3000, () => console.log('🎬 سينما البوب (نسخة المتصفح) جاهزة!'));
