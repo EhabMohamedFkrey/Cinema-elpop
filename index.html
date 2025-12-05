@@ -4,108 +4,131 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>سينما البوب | Cinema Elpop</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     <style>
         body {
             background-color: #121212;
-            color: #ffffff;
+            color: #fff;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
+            text-align: center;
             padding: 20px;
-            margin: 0;
         }
-        h1 { color: #e50914; margin-bottom: 20px; }
         .container {
-            width: 100%;
-            max-width: 600px;
+            max-width: 800px;
+            margin: 0 auto;
             background: #1e1e1e;
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.6);
         }
+        h1 { color: #e50914; margin-bottom: 10px; }
         input {
-            width: 95%;
+            width: 80%;
             padding: 12px;
-            margin-bottom: 15px;
+            margin: 10px 0;
             background: #333;
-            border: 1px solid #444;
+            border: 1px solid #555;
             color: white;
-            border-radius: 5px;
+            border-radius: 6px;
             font-size: 16px;
         }
         button {
-            width: 100%;
-            padding: 12px;
+            padding: 12px 25px;
             background: #e50914;
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 18px;
+            border-radius: 6px;
             cursor: pointer;
+            font-size: 16px;
             font-weight: bold;
         }
         button:hover { background: #b20710; }
-        #videoContainer {
-            margin-top: 20px;
-            display: none;
-            width: 100%;
-        }
+        
+        #videoArea { display: none; margin-top: 20px; }
         video {
             width: 100%;
             border-radius: 8px;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3);
+            background: #000;
+            max-height: 500px;
         }
-        .loading { display: none; margin-top: 10px; color: #aaa; }
+        
+        /* زر التحميل الجديد */
+        .download-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .download-btn:hover { background: #218838; }
+
+        .loading { display: none; color: #aaa; margin-top: 10px; }
     </style>
 </head>
 <body>
 
-    <h1>🎬 سينما البوب</h1>
-    
     <div class="container">
-        <p>حط رابط صفحة الفيلم هنا واستمتع:</p>
-        <input type="text" id="movieUrl" placeholder="مثال: https://a.asd.homes/...">
-        <button onclick="getMovie()">شاهد الآن 🍿</button>
-        <p class="loading" id="loadingText">جاري البحث عن الفيديو... اصبر ثواني ⏳</p>
-    </div>
+        <h1>🎬 سينما البوب</h1>
+        <p>ضع رابط صفحة المشاهدة (Watch) هنا:</p>
+        
+        <input type="text" id="urlInput" placeholder="https://a.asd.homes/.../watch/">
+        <button onclick="fetchVideo()">شاهد وحمل 🚀</button>
+        
+        <p class="loading" id="loading">جاري البحث عن الفيديو.. (قد يستغرق 30 ثانية)</p>
 
-    <div id="videoContainer">
-        <video id="player" controls playsinline>
-            <source src="" type="video/mp4">
-            المتصفح بتاعك مش بيدعم الفيديو ده.
-        </video>
+        <div id="videoArea">
+            <video id="videoPlayer" controls playsinline></video>
+            <br>
+            <a id="downloadLink" class="download-btn" href="#" target="_blank">⬇️ تحميل الفيديو</a>
+        </div>
     </div>
 
     <script>
-        async function getMovie() {
-            const urlInput = document.getElementById('movieUrl').value;
-            const loading = document.getElementById('loadingText');
-            const container = document.getElementById('videoContainer');
-            const player = document.getElementById('player');
+        async function fetchVideo() {
+            const url = document.getElementById('urlInput').value;
+            const loading = document.getElementById('loading');
+            const videoArea = document.getElementById('videoArea');
+            const video = document.getElementById('videoPlayer');
+            const downloadBtn = document.getElementById('downloadLink');
 
-            if (!urlInput) return alert("يا ريس نسيت تحط الرابط!");
+            if (!url) return alert("حط الرابط الأول!");
 
             loading.style.display = 'block';
-            container.style.display = 'none';
+            videoArea.style.display = 'none';
 
             try {
-                // نكلم السيرفر بتاعنا
-                const response = await fetch(`/get-video?url=${encodeURIComponent(urlInput)}`);
-                const data = await response.json();
+                const res = await fetch(`/get-video?url=${encodeURIComponent(url)}`);
+                const data = await res.json();
 
                 loading.style.display = 'none';
 
                 if (data.success && data.stream_url) {
-                    player.src = data.stream_url;
-                    container.style.display = 'block';
-                    player.play();
+                    videoArea.style.display = 'block';
+                    const streamUrl = data.stream_url;
+
+                    // إعداد زر التحميل
+                    downloadBtn.href = streamUrl;
+
+                    // تشغيل الفيديو باستخدام HLS لو الصيغة m3u8 (عشان الجودات)
+                    if (Hls.isSupported() && streamUrl.includes('.m3u8')) {
+                        const hls = new Hls();
+                        hls.loadSource(streamUrl);
+                        hls.attachMedia(video);
+                    } else {
+                        // تشغيل عادي لو mp4
+                        video.src = streamUrl;
+                    }
+                    video.play();
                 } else {
-                    alert("مش قادر أجيب الفيديو: " + (data.message || "سبب غير معروف"));
+                    alert("للأسف: " + (data.message || "لم يتم العثور على فيديو"));
                 }
-            } catch (error) {
+            } catch (err) {
                 loading.style.display = 'none';
-                alert("حصل خطأ في الاتصال بالسيرفر!");
+                alert("خطأ في الاتصال بالسيرفر");
             }
         }
     </script>
