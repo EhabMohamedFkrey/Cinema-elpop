@@ -1,5 +1,6 @@
-FROM node:18-slim
+FROM ghcr.io/puppeteer/puppeteer:latest
 
+USER root
 WORKDIR /usr/src/app
 
 COPY package*.json ./
@@ -9,3 +10,4 @@ COPY . .
 
 EXPOSE 3000
 CMD [ "node", "server.js" ]
+
