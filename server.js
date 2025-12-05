@@ -1,15 +1,15 @@
 const express = require('express');
-const puppeteer = require('puppeteer-extra'); // النسخة الذكية
-const StealthPlugin = require('puppeteer-extra-plugin-stealth'); // التخفي من الحماية
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
 const cors = require('cors');
 const path = require('path');
 
-// تفعيل وضع التخفي عشان الموقع ميعرفش إننا روبوت
 puppeteer.use(StealthPlugin());
 
 const app = express();
 app.use(cors());
 
+// تقديم ملفات الواجهة
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
@@ -20,66 +20,70 @@ app.get('/get-video', async (req, res) => {
 
     let browser = null;
     try {
-        console.log(`🚀 جاري فتح المتصفح للرابط: ${movieUrl}`);
+        console.log(`🚀 جاري فحص: ${movieUrl}`);
 
-        // تشغيل المتصفح بإعدادات خاصة لسيرفر Render
         browser = await puppeteer.launch({
-            headless: 'new', // تشغيل في الخلفية
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // توفير الذاكرة
-                '--single-process' 
-            ]
+            headless: 'new',
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
         });
 
         const page = await browser.newPage();
+        
+        // متغير هنخزن فيه الرابط
+        let foundVideo = null;
 
-        // تسريع التحميل عن طريق منع الصور والخطوط
+        // 1. تفعيل نظام مراقبة الشبكة (Network Sniffer)
         await page.setRequestInterception(true);
+        
         page.on('request', (req) => {
-            if (['image', 'stylesheet', 'font'].includes(req.resourceType())) {
+            const url = req.url();
+            const type = req.resourceType();
+
+            // لو لقينا رابط فيديو صريح
+            if (url.endsWith('.mp4') || url.includes('.m3u8') || (type === 'media')) {
+                console.log('🎯 تم اصطياد الفيديو:', url);
+                foundVideo = url;
+                req.abort(); // وقف التحميل فوراً عشان نوفر وقت
+            } 
+            // منع تحميل الصور والخطوط لتسريع العملية
+            else if (['image', 'stylesheet', 'font', 'other'].includes(type)) {
                 req.abort();
             } else {
                 req.continue();
             }
         });
 
-        // الذهاب للموقع وانتظار التحميل
-        // timeout 60 ثانية عشان لو الموقع بطيء
-        await page.goto(movieUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // 2. فتح الصفحة (نعطيها مهلة 45 ثانية)
+        try {
+            await page.goto(movieUrl, { waitUntil: 'networkidle2', timeout: 45000 });
+        } catch (e) {
+            console.log("⚠️ الصفحة تقيلة، بس هنكمل يمكن لقينا الرابط.");
+        }
 
-        // البحث الذكي عن الفيديو داخل الصفحة
-        const videoData = await page.evaluate(() => {
-            // 1. تدوير على أي iframe فيه كلمة video أو embed
-            const iframes = Array.from(document.querySelectorAll('iframe'));
-            for (let iframe of iframes) {
-                if (iframe.src && (iframe.src.includes('embed') || iframe.src.includes('watch') || iframe.src.includes('mp4'))) {
-                    return iframe.src;
-                }
-            }
-            
-            // 2. تدوير على عنصر video مباشر
-            const video = document.querySelector('video');
-            if (video && video.src) return video.src;
+        // 3. لو الشبكة ملقطتش حاجة، ندور جوه الـ HTML (خطة ب)
+        if (!foundVideo) {
+            foundVideo = await page.evaluate(() => {
+                const video = document.querySelector('video');
+                if (video && video.src) return video.src;
+                const iframe = document.querySelector('iframe');
+                if (iframe && iframe.src && (iframe.src.includes('mp4') || iframe.src.includes('m3u8'))) return iframe.src;
+                return null;
+            });
+        }
 
-            return null; 
-        });
-
-        if (videoData) {
-            console.log('✅ تم العثور على الفيديو:', videoData);
-            res.json({ success: true, stream_url: videoData });
+        if (foundVideo) {
+            res.json({ success: true, stream_url: foundVideo });
         } else {
-            console.log('❌ لم يتم العثور على فيديو مباشر.');
-            res.json({ success: false, message: "الموقع فتح بس مش لاقيين الفيديو، جرب رابط المشاهدة المباشر (watch) مش صفحة الفيلم." });
+            res.json({ success: false, message: "مش قادر أوصل لملف الفيديو المباشر، الموقع ده حمايته قوية." });
         }
 
     } catch (error) {
         console.error('Error:', error.message);
-        res.status(500).json({ success: false, error: "حدث خطأ أثناء التصفح: " + error.message });
+        res.status(500).json({ success: false, error: error.message });
     } finally {
-        if (browser) await browser.close(); // قفل المتصفح ضروري عشان الرامات
+        if (browser) await browser.close();
     }
 });
 
-app.listen(3000, () => console.log('🎬 سينما البوب (نسخة المتصفح) جاهزة!'));
+// تشغيل السيرفر
+app.listen(3000, () => console.log('🎬 السيرفر جاهز!'));
